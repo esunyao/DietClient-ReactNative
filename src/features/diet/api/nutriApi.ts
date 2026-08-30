@@ -12,6 +12,7 @@ import type {
   CaptureSubmitRequest,
   CaptureSubmission,
   DailyNutritionSummary,
+  DailyNutritionTrend,
   Meal,
   MealCorrectionRequest,
   MealId,
@@ -143,6 +144,12 @@ export const nutriApi = {
     unwrapApiResponse(
       await apiClient.get<ApiEnvelope<DailyNutritionSummary>>(`${path}/summaries/daily`, {
         params: { localDate },
+      }),
+    ),
+  getDailyTrend: async (dateFrom: string, dateTo: string): Promise<DailyNutritionTrend> =>
+    unwrapApiResponse(
+      await apiClient.get<ApiEnvelope<DailyNutritionTrend>>(`${path}/summaries/daily-trend`, {
+        params: { dateFrom, dateTo },
       }),
     ),
 };

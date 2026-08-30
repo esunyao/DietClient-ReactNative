@@ -123,4 +123,22 @@ describe('NutriMemo photo capture contract', () => {
     });
     expect(patchMock).toHaveBeenCalledWith(`v1/nutri/meals/${snowflakeId}`, { notes: '少盐' });
   });
+
+  it('loads the inclusive daily nutrition trend range', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        data: {
+          dateFrom: '2026-08-24',
+          dateTo: '2026-08-30',
+          days: [],
+        },
+      },
+    });
+
+    await nutriApi.getDailyTrend('2026-08-24', '2026-08-30');
+
+    expect(getMock).toHaveBeenCalledWith('v1/nutri/summaries/daily-trend', {
+      params: { dateFrom: '2026-08-24', dateTo: '2026-08-30' },
+    });
+  });
 });

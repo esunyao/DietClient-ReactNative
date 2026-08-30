@@ -159,3 +159,8 @@ export interface DailyNutritionSummary {
   mealBreakdown: Array<{ mealType: MealType; mealCount: number; nutrients: NutrientValue[] }>;
   updatedAt: string;
 }
+export interface DailyNutritionTrend {
+  dateFrom: string;
+  dateTo: string;
+  days: DailyNutritionSummary[];
+}
