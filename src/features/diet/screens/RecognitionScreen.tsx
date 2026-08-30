@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { launchCamera, launchImageLibrary, type Asset } from 'react-native-image-picker';
-import { Camera, Send, X } from 'lucide-react-native';
+import { Camera, Send, ShieldCheck, X } from 'lucide-react-native';
 
 import type { DietStackParamList } from '../../../navigation/types';
 import { PageShell } from '../../../navigation/components/PageShell';
@@ -18,6 +19,11 @@ import {
   useToast,
 } from '../../../shared/components';
 import { colors, fonts } from '../../../shared/theme/tokens';
+import { useSessionStore } from '../../../app/session/sessionStore';
+import {
+  canSubmitAiNutritionAnalysis,
+  type AiNutritionConsentStatus,
+} from '../../../app/session/aiNutritionConsent';
 import {
   CaptureDraftStrip,
   CaptureImageGrid,
@@ -117,6 +123,10 @@ export function RecognitionScreen({ navigation }: Props) {
   const [notes, setNotes] = useState('');
   const [recent, setRecent] = useState<MealHistoryItem[]>([]);
   const [historyState, setHistoryState] = useState<LoadState>('loading');
+  const consentStatus = useSessionStore(state => state.aiNutritionConsentStatus);
+  const consentUpdating = useSessionStore(state => state.aiNutritionConsentUpdating);
+  const refreshConsent = useSessionStore(state => state.refreshAiNutritionConsent);
+  const updateConsent = useSessionStore(state => state.updateAiNutritionConsent);
 
   const refreshRecent = useCallback(async () => {
     try {
@@ -204,6 +214,12 @@ export function RecognitionScreen({ navigation }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshConsent().catch(() => undefined);
+    }, [refreshConsent]),
+  );
 
   const selectDraft = useCallback(
     async (id: string) => {
@@ -294,6 +310,8 @@ export function RecognitionScreen({ navigation }: Props) {
   );
 
   const submit = useCallback(async () => {
+    if (!canSubmitAiNutritionAnalysis(consentStatus))
+      return show('请先确认 AI 营养分析授权。', 'error');
     if (!session || !session.images.some(item => item.status === 'confirmed'))
       return show('请先拍摄或选择至少一张已确认图片。', 'error');
     if (submitting) return;
@@ -317,7 +335,16 @@ export function RecognitionScreen({ navigation }: Props) {
     } finally {
       setSubmitting(false);
     }
-  }, [mealType, notes, refreshDrafts, refreshRecent, session, show, submitting]);
+  }, [consentStatus, mealType, notes, refreshDrafts, refreshRecent, session, show, submitting]);
+
+  const grantConsent = useCallback(async () => {
+    try {
+      await updateConsent(true);
+      show('已开启 AI 营养分析授权。', 'success');
+    } catch (error) {
+      show(getErrorMessage(error), 'error');
+    }
+  }, [show, updateConsent]);
 
   const cancel = useCallback(async () => {
     if (!session) return;
@@ -378,6 +405,12 @@ export function RecognitionScreen({ navigation }: Props) {
   return (
     <PageShell pageId="recognition">
       <ModeSwitch mode={mode} onChange={setMode} />
+      <AiConsentGate
+        status={consentStatus}
+        updating={consentUpdating}
+        onGrant={grantConsent}
+        onRetry={() => refreshConsent().catch(() => undefined)}
+      />
       <CaptureDraftStrip
         drafts={drafts}
         selectedId={selectedDraftId}
@@ -456,7 +489,12 @@ export function RecognitionScreen({ navigation }: Props) {
             <AppButton
               label={submitting ? '正在提交…' : '提交餐食'}
               icon={<Send color="#FFFFFF" size={16} />}
-              disabled={submitting || uploading || confirmedCount === 0}
+              disabled={
+                submitting ||
+                uploading ||
+                confirmedCount === 0 ||
+                !canSubmitAiNutritionAnalysis(consentStatus)
+              }
               onPress={submit}
               style={styles.action}
             />
@@ -490,6 +528,55 @@ export function RecognitionScreen({ navigation }: Props) {
         onConfirm={deleteDraft}
       />
     </PageShell>
+  );
+}
+
+function AiConsentGate({
+  status,
+  updating,
+  onGrant,
+  onRetry,
+}: {
+  status: AiNutritionConsentStatus;
+  updating: boolean;
+  onGrant: () => void;
+  onRetry: () => void;
+}) {
+  const granted = status === 'granted';
+  const loading = status === 'idle' || status === 'loading';
+  const label = granted
+    ? '已授权'
+    : status === 'needs_review'
+    ? '需重新确认'
+    : status === 'error'
+    ? '读取失败'
+    : loading
+    ? '检查中'
+    : '未授权';
+  return (
+    <GlassCard style={styles.consentCard}>
+      <View style={styles.consentHead}>
+        <View style={styles.consentIcon}>
+          <ShieldCheck color={colors.blue} size={20} />
+        </View>
+        <View style={styles.consentCopy}>
+          <Text style={styles.consentTitle}>AI 营养分析授权</Text>
+          <Text style={styles.consentText}>
+            分析会读取最小健康上下文与本次餐食图片；HealthMind 不保存图片、完整画像、Prompt
+            或原始模型输出。
+          </Text>
+        </View>
+        <Tag label={label} tone={granted ? 'green' : status === 'error' ? 'red' : 'amber'} />
+      </View>
+      {!granted ? (
+        <AppButton
+          label={status === 'error' ? '重新读取授权' : '同意并开启 AI 分析'}
+          variant="secondary"
+          loading={loading || updating}
+          onPress={status === 'error' ? onRetry : onGrant}
+        />
+      ) : null}
+    </GlassCard>
   );
 }
 
@@ -621,6 +708,25 @@ const styles = StyleSheet.create({
   modeText: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, fontWeight: '800' },
   modeTextActive: { color: colors.blue },
   captureCard: { alignItems: 'center', gap: 11, padding: 18 },
+  consentCard: { gap: 12 },
+  consentHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
+  consentIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.blueSoft,
+  },
+  consentCopy: { flex: 1 },
+  consentTitle: { color: colors.ink, fontFamily: fonts.body, fontSize: 14, fontWeight: '800' },
+  consentText: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 3,
+  },
   scanFrame: {
     width: 142,
     height: 142,

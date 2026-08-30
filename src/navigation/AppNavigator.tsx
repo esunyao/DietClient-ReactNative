@@ -28,6 +28,7 @@ import { EditProfileScreen } from '../features/profile/screens/EditProfileScreen
 import { ProfileScreen } from '../features/profile/screens/ProfileScreen';
 import { HealthRecordFormScreen } from '../features/profile/screens/HealthRecordFormScreen';
 import { HealthRecordsScreen } from '../features/profile/screens/HealthRecordsScreen';
+import { AiNutritionConsentScreen } from '../features/profile/screens/AiNutritionConsentScreen';
 // 主题 Token
 import { colors, fonts } from '../shared/theme/tokens';
 // 自定义毛玻璃 TabBar
@@ -123,6 +124,7 @@ function ProfileNavigator() {
         initialParams={{ onboarding: profileOnboardingRequired }}
       />
       <ProfileStack.Screen name="HealthRecords" component={HealthRecordsScreen} />
+      <ProfileStack.Screen name="AiNutritionConsent" component={AiNutritionConsentScreen} />
       <ProfileStack.Screen name="HealthRecordForm" component={HealthRecordFormScreen} />
     </ProfileStack.Navigator>
   );

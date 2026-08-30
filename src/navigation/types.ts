@@ -18,6 +18,7 @@ export type ProfileStackParamList = {
   ProfileMain: undefined;
   EditProfile: { onboarding?: boolean } | undefined;
   HealthRecords: { onboarding?: boolean } | undefined;
+  AiNutritionConsent: undefined;
   HealthRecordForm: {
     kind: 'measurement' | 'goal' | 'allergy' | 'condition' | 'restriction';
     id?: string;

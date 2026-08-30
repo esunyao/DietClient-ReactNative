@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { create } from 'zustand';
+import { Platform } from 'react-native';
 
 import {
   ApiError,
@@ -18,7 +19,16 @@ import {
 } from '../../features/auth/api/authApi';
 import { profileOnboardingStorage } from '../../features/auth/services/profileOnboardingStorage';
 import { userApi } from '../../features/profile/api/userApi';
+import { healthApi } from '../../features/profile/api/healthApi';
 import type { User, UserProfile } from '../../features/profile/api/profileTypes';
+import type { UserConsent } from '../../features/profile/api/profileTypes';
+import {
+  AI_NUTRITION_CONSENT_POLICY_VERSION,
+  AI_NUTRITION_CONSENT_TYPE,
+  consentSourceForPlatform,
+  resolveAiNutritionConsent,
+  type AiNutritionConsentStatus,
+} from './aiNutritionConsent';
 
 type SessionStatus = 'restoring' | 'signedOut' | 'signedIn';
 
@@ -31,12 +41,17 @@ interface SessionState {
   profileMissing: boolean;
   onboardingResolved: boolean;
   profileOnboardingRequired: boolean;
+  aiNutritionConsentStatus: AiNutritionConsentStatus;
+  aiNutritionConsent: UserConsent | null;
+  aiNutritionConsentUpdating: boolean;
   error: string | null;
   hydrate: () => Promise<void>;
   signIn: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<RegistrationResult>;
   resendVerificationEmail: (email: string) => Promise<void>;
   refreshUserData: () => Promise<void>;
+  refreshAiNutritionConsent: () => Promise<void>;
+  updateAiNutritionConsent: (granted: boolean) => Promise<void>;
   setUser: (user: User) => void;
   setProfile: (profile: UserProfile) => void;
   completeProfileOnboarding: () => Promise<void>;
@@ -145,6 +160,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   profileMissing: false,
   onboardingResolved: false,
   profileOnboardingRequired: false,
+  aiNutritionConsentStatus: 'idle',
+  aiNutritionConsent: null,
+  aiNutritionConsentUpdating: false,
   error: null,
 
   hydrate: async () => {
@@ -205,6 +223,41 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ ...data });
   },
 
+  refreshAiNutritionConsent: async () => {
+    set({ aiNutritionConsentStatus: 'loading' });
+    try {
+      const resolution = resolveAiNutritionConsent(await healthApi.consents.list());
+      set({
+        aiNutritionConsentStatus: resolution.status,
+        aiNutritionConsent: resolution.latest,
+      });
+    } catch (error) {
+      set({ aiNutritionConsentStatus: 'error' });
+      throw error;
+    }
+  },
+
+  updateAiNutritionConsent: async granted => {
+    set({ aiNutritionConsentUpdating: true });
+    try {
+      const consent = await healthApi.consents.create({
+        consentType: AI_NUTRITION_CONSENT_TYPE,
+        policyVersion: AI_NUTRITION_CONSENT_POLICY_VERSION,
+        granted,
+        source: consentSourceForPlatform(Platform.OS),
+      });
+      set({
+        aiNutritionConsentStatus: granted ? 'granted' : 'denied',
+        aiNutritionConsent: consent,
+      });
+    } catch (error) {
+      set({ aiNutritionConsentStatus: 'error' });
+      throw error;
+    } finally {
+      set({ aiNutritionConsentUpdating: false });
+    }
+  },
+
   setUser: user =>
     set(state => ({
       user,
@@ -239,6 +292,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       profileMissing: false,
       onboardingResolved: false,
       profileOnboardingRequired: false,
+      aiNutritionConsentStatus: 'idle',
+      aiNutritionConsent: null,
+      aiNutritionConsentUpdating: false,
       error: null,
     });
   },

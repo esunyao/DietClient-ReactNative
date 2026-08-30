@@ -15,6 +15,8 @@ import { healthApi } from './healthApi';
 
 const patchMock = apiClient.patch as unknown as jest.Mock;
 const deleteMock = apiClient.delete as unknown as jest.Mock;
+const getMock = apiClient.get as unknown as jest.Mock;
+const postMock = apiClient.post as unknown as jest.Mock;
 const unwrapMock = unwrapApiResponse as unknown as jest.Mock;
 const assertMock = assertApiSuccess as unknown as jest.Mock;
 const snowflakeId = '2086475596958904300';
@@ -49,5 +51,26 @@ describe('healthApi record paths', () => {
 
     expect(deleteMock).toHaveBeenCalledWith(`v1/users/self/medical-conditions/${snowflakeId}`);
     expect(assertMock).toHaveBeenCalled();
+  });
+
+  it('reads and appends the AI nutrition consent contract', async () => {
+    getMock.mockResolvedValue({ data: { data: [] } });
+    postMock.mockResolvedValue({ data: { data: { consentId: snowflakeId } } });
+
+    await healthApi.consents.list();
+    await healthApi.consents.create({
+      consentType: 'ai_nutrition_analysis',
+      policyVersion: '1.0',
+      granted: true,
+      source: 'mobile',
+    });
+
+    expect(getMock).toHaveBeenCalledWith('v1/users/self/consents');
+    expect(postMock).toHaveBeenCalledWith('v1/users/self/consents', {
+      consentType: 'ai_nutrition_analysis',
+      policyVersion: '1.0',
+      granted: true,
+      source: 'mobile',
+    });
   });
 });

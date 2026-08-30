@@ -12,6 +12,7 @@ import {
   Ruler,
   Scale,
   ShieldAlert,
+  ShieldCheck,
   Stethoscope,
   UserRound,
 } from 'lucide-react-native';
@@ -226,6 +227,11 @@ export function ProfileScreen({ navigation }: ProfileProps) {
           icon={<FileText color={colors.blue} size={18} />}
           label="我的报告"
           onPress={() => navigation.getParent()?.navigate('ReportsTab' as never)}
+        />
+        <ProfileAction
+          icon={<ShieldCheck color={colors.blue} size={18} />}
+          label="AI 数据与隐私"
+          onPress={() => navigation.navigate('AiNutritionConsent')}
         />
       </View>
 
