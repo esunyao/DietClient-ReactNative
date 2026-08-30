@@ -317,7 +317,7 @@ export function RecognitionScreen({ navigation }: Props) {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await submitCaptureSession(session.captureSessionId, {
+      const submission = await submitCaptureSession(session.captureSessionId, {
         mealType,
         notes: notes.trim() || null,
       });
@@ -329,13 +329,24 @@ export function RecognitionScreen({ navigation }: Props) {
       setNotes('');
       setMealType(defaultMealType());
       await Promise.all([refreshDrafts(null), refreshRecent()]);
-      show('餐食已入库，可以继续记录下一餐；AI 将在后台补充营养数据。', 'success');
+      show('餐食已入库，AI 将在后台补充营养数据。', 'success');
+      navigation.navigate('MealDetail', { mealId: submission.meal.mealId });
     } catch (error) {
       show(getErrorMessage(error), 'error');
     } finally {
       setSubmitting(false);
     }
-  }, [consentStatus, mealType, notes, refreshDrafts, refreshRecent, session, show, submitting]);
+  }, [
+    consentStatus,
+    mealType,
+    navigation,
+    notes,
+    refreshDrafts,
+    refreshRecent,
+    session,
+    show,
+    submitting,
+  ]);
 
   const grantConsent = useCallback(async () => {
     try {

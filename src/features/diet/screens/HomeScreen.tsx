@@ -17,6 +17,12 @@ import { colors, fonts, radii, spacing } from '../../../shared/theme/tokens';
 import { nutriApi } from '../api/nutriApi';
 import type { MealHistoryItem, NutrientValue } from '../api/nutriTypes';
 import { localDateFromDate } from '../services/mealCapture';
+import {
+  formatNutrientAmount,
+  mealEnergySummary,
+  mealStatusPresentation,
+  nutrientAmount,
+} from '../services/mealPresentation';
 type HomeProps = NativeStackScreenProps<HomeStackParamList, 'HomeMain'>;
 const MiniNutrition = memo(function ({
   label,
@@ -60,7 +66,7 @@ const RecordRow = memo(function ({
   name: string;
   detail: string;
   tag: string;
-  tone?: 'green' | 'amber';
+  tone?: 'green' | 'blue' | 'red';
   onPress?: () => void;
 }) {
   return (
@@ -80,12 +86,6 @@ const RecordRow = memo(function ({
     </Pressable>
   );
 });
-function nutrientValue(nutrients: NutrientValue[], code: string): number {
-  return nutrients.find(item => item.nutrientCode === code)?.amount ?? 0;
-}
-function formatNutrient(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
-}
 function recordEmoji(meal: MealHistoryItem): string {
   return {
     breakfast: '🥣',
@@ -95,11 +95,36 @@ function recordEmoji(meal: MealHistoryItem): string {
     other: '🍽️',
   }[meal.mealType];
 }
+function mealTypeLabel(meal: MealHistoryItem): string {
+  return {
+    breakfast: '早餐',
+    lunch: '午餐',
+    dinner: '晚餐',
+    snack: '加餐',
+    other: '其他',
+  }[meal.mealType];
+}
+function mealRecordDetail(meal: MealHistoryItem): string {
+  const time = new Date(meal.consumedAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return [mealTypeLabel(meal), time, mealEnergySummary(meal.analysisStatus, meal.nutrients)].join(
+    ' · ',
+  );
+}
 export function HomeScreen({ navigation }: HomeProps) {
   const [todayMeals, setTodayMeals] = useState<MealHistoryItem[]>([]);
   const [todayNutrients, setTodayNutrients] = useState<NutrientValue[]>([]);
   const [loadingMeals, setLoadingMeals] = useState(true);
   const today = localDateFromDate();
+  const now = new Date();
+  const greeting = now.getHours() < 12 ? '上午好' : now.getHours() < 18 ? '下午好' : '晚上好';
+  const todayLabel = now.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
   const openDiet = useCallback(
     (
       screen?: 'Recognition' | 'MealHistory' | 'MealDetail',
@@ -153,7 +178,9 @@ export function HomeScreen({ navigation }: HomeProps) {
     <AppScreen>
       <View style={styles.homeHeader}>
         <View>
-          <Text style={styles.greetingSmall}>2026 年 8 月 5 日 · 下午好</Text>
+          <Text style={styles.greetingSmall}>
+            {todayLabel} · {greeting}
+          </Text>
           <Text style={styles.greetingTitle}>今天吃得怎么样？</Text>
         </View>
         <View style={styles.smallBrand}>
@@ -226,22 +253,22 @@ export function HomeScreen({ navigation }: HomeProps) {
       <View style={styles.nutritionGrid}>
         <MiniNutrition
           label="热量"
-          value={formatNutrient(nutrientValue(todayNutrients, 'ENERGY_KCAL'))}
+          value={formatNutrientAmount(nutrientAmount(todayNutrients, 'ENERGY_KCAL'))}
           unit="kcal"
         />
         <MiniNutrition
           label="蛋白质"
-          value={formatNutrient(nutrientValue(todayNutrients, 'PROTEIN'))}
+          value={formatNutrientAmount(nutrientAmount(todayNutrients, 'PROTEIN'))}
           unit="g"
         />
         <MiniNutrition
           label="碳水"
-          value={formatNutrient(nutrientValue(todayNutrients, 'CARBOHYDRATE'))}
+          value={formatNutrientAmount(nutrientAmount(todayNutrients, 'CARBOHYDRATE'))}
           unit="g"
         />
         <MiniNutrition
           label="脂肪"
-          value={formatNutrient(nutrientValue(todayNutrients, 'FAT'))}
+          value={formatNutrientAmount(nutrientAmount(todayNutrients, 'FAT'))}
           unit="g"
         />
       </View>
@@ -255,34 +282,24 @@ export function HomeScreen({ navigation }: HomeProps) {
         }
       />
       <GlassCard style={styles.records}>
-        {todayMeals.map(meal => (
-          <RecordRow
-            key={meal.mealId}
-            emoji={recordEmoji(meal)}
-            name={meal.notes || '已分析餐食'}
-            detail={`${
-              meal.mealType === 'breakfast'
-                ? '早餐'
-                : meal.mealType === 'lunch'
-                ? '午餐'
-                : meal.mealType === 'dinner'
-                ? '晚餐'
-                : meal.mealType === 'snack'
-                ? '加餐'
-                : '其他'
-            } · ${new Date(meal.consumedAt).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })} · ${formatNutrient(nutrientValue(meal.nutrients, 'ENERGY_KCAL'))} kcal`}
-            tag="已分析"
-            tone="green"
-            onPress={() =>
-              openDiet('MealDetail', {
-                mealId: meal.mealId,
-              })
-            }
-          />
-        ))}
+        {todayMeals.map(meal => {
+          const status = mealStatusPresentation(meal.analysisStatus);
+          return (
+            <RecordRow
+              key={meal.mealId}
+              emoji={recordEmoji(meal)}
+              name={meal.notes || '餐食记录'}
+              detail={mealRecordDetail(meal)}
+              tag={status.label}
+              tone={status.tone}
+              onPress={() =>
+                openDiet('MealDetail', {
+                  mealId: meal.mealId,
+                })
+              }
+            />
+          );
+        })}
         {!loadingMeals && !todayMeals.length ? (
           <Pressable onPress={() => openDiet()} style={styles.emptyRecords}>
             <Text style={styles.emptyRecordsText}>今天还没有餐食记录，点击开始记录。</Text>

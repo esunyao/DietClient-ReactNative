@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { BadgeCheck, RefreshCw } from 'lucide-react-native';
 
 import type { DietStackParamList } from '../../../navigation/types';
@@ -20,40 +21,55 @@ import { nutriApi } from '../api/nutriApi';
 import type { Meal } from '../api/nutriTypes';
 import { mealTypeLabels } from '../services/mealCorrection';
 import { retryCaptureSession } from '../services/mealCapture';
+import { isMealAnalysisPending, mealStatusPresentation } from '../services/mealPresentation';
 
 type Props = NativeStackScreenProps<DietStackParamList, 'MealDetail'>;
-function analysisStatusLabel(status: Meal['analysisStatus']): string {
-  if (status === 'completed') return '分析完成';
-  if (status === 'analysing') return 'AI 分析中';
-  if (status === 'failed') return '分析失败';
-  return '等待 AI 分析';
-}
 export function MealDetailScreen({ navigation, route }: Props) {
   const { show } = useToast();
   const [meal, setMeal] = useState<Meal | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const load = useCallback(async () => {
-    try {
-      setMeal(await nutriApi.getMeal(route.params.mealId));
-    } catch (error) {
-      show(getErrorMessage(error), 'error');
-    }
-  }, [route.params.mealId, show]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  useEffect(() => {
-    if (!meal || !['queued', 'analysing'].includes(meal.analysisStatus)) return undefined;
-    const timer = setInterval(() => {
-      load();
-    }, 8000);
-    return () => clearInterval(timer);
-  }, [load, meal]);
+  const inFlight = useRef(false);
+  const lastStatus = useRef<Meal['analysisStatus'] | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const poll = async () => {
+        if (inFlight.current) {
+          if (active) timer = setTimeout(poll, 250);
+          return;
+        }
+        inFlight.current = true;
+        try {
+          const next = await nutriApi.getMeal(route.params.mealId);
+          if (!active) return;
+          lastStatus.current = next.analysisStatus;
+          setMeal(next);
+        } catch (error) {
+          if (active && lastStatus.current === null) show(getErrorMessage(error), 'error');
+        } finally {
+          inFlight.current = false;
+          if (active && lastStatus.current && isMealAnalysisPending(lastStatus.current)) {
+            timer = setTimeout(poll, 8000);
+          }
+        }
+      };
+
+      poll();
+      return () => {
+        active = false;
+        if (timer) clearTimeout(timer);
+      };
+    }, [route.params.mealId, show]),
+  );
   const retry = useCallback(async () => {
     if (!meal || retrying) return;
     setRetrying(true);
     try {
       const result = await retryCaptureSession(meal.captureSessionId);
+      lastStatus.current = result.meal.analysisStatus;
       setMeal(result.meal);
       show('已重新提交 AI 分析。', 'success');
     } catch (error) {
@@ -68,6 +84,7 @@ export function MealDetailScreen({ navigation, route }: Props) {
         <EmptyState title="正在加载本餐报告" description="请稍候…" />
       </PageShell>
     );
+  const presentation = mealStatusPresentation(meal.analysisStatus);
   return (
     <PageShell pageId="mealDetail" onBack={() => navigation.goBack()}>
       <GlassCard>
@@ -78,10 +95,7 @@ export function MealDetailScreen({ navigation, route }: Props) {
               {new Date(meal.consumedAt).toLocaleString()} · {meal.localDate}
             </Text>
           </View>
-          <Tag
-            label={analysisStatusLabel(meal.analysisStatus)}
-            tone={meal.analysisStatus === 'failed' ? 'amber' : 'green'}
-          />
+          <Tag label={presentation.label} tone={presentation.tone} />
         </View>
         {meal.notes ? <Text style={styles.note}>{meal.notes}</Text> : null}
         {meal.analysisStatus !== 'completed' ? (
