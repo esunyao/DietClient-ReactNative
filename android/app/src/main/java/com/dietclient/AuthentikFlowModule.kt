@@ -144,8 +144,8 @@ class AuthentikFlowModule(reactContext: ReactApplicationContext) :
 
   private companion object {
     private const val NAME = "AuthentikFlow"
-    private const val AUTHENTIK_HOST = "auth.lovedage.com"
-    private const val AUTHENTIK_AUTHORITY = "auth.lovedage.com:8093"
+    private const val AUTHENTIK_HOST = "auth.lovedage.com.cn"
+    private const val AUTHENTIK_AUTHORITY = "auth.lovedage.com.cn:8093"
     private const val FLOW_PATH_PREFIX = "/api/v3/flows/executor/"
     private const val AUTHORIZATION_PATH = "/application/o/authorize/"
     private const val JSON_ACCEPT = "application/json"
