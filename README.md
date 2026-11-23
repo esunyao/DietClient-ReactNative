@@ -1,5 +1,8 @@
 # DietClient
 
+> [!note]
+> 项目迁移至 [DietClient](https://github.com/esunyao/DietClient)
+
 饮食健康管理客户端，基于 React Native 0.86、React 19 和 TypeScript，同时支持 Android、iOS 与 Web 调试壳。
 
 ## Requirements
